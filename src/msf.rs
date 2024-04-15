@@ -3,10 +3,14 @@
 // Unauthorized copying of this file, via any medium is strictly prohibited
 // Proprietary and confidential
 
-use crate::struct_overlay_both;
+use std::f32::consts::E;
+
+use crate::{pagelist::PageList, struct_overlay_both};
+use static_assertions::const_assert;
 
 /// Magic bytes of the PDB file format 7.0
 pub const MAGIC: &[u8] = b"Microsoft C/C++ MSF 7.00\r\n\x1a\x44\x53\x00\x00\x00";
+pub type PageNumber = u32;
 
 // https://llvm.org/docs/PDB/MsfFile.html
 // struct SuperBlock {
@@ -41,3 +45,40 @@ struct_overlay_both!((pub MsfBigHeader, pub MsfBigHeaderMut) {
     // this array is given by ceil(NumDirectoryBytes / BlockSize).
     [0x34] stream_block_map: u32,
 });
+
+impl<'a> MsfBigHeader<'a> {
+    /// Validates the magic bytes in the header.
+    pub fn from(bytes: &'a [u8]) -> Option<Self> {
+        let header = Self::new(bytes)?;
+        if header.get_magic() == MAGIC {
+            Some(header)
+        } else {
+            None
+        }
+    }
+    /// How many pages are required to store N amount of bytes?
+    pub fn pages_needed_to_store(&self, bytes: u32) -> u32 {
+        (bytes + (self.get_page_size() - 1)) / self.get_page_size()
+    }
+}
+
+const_assert!(MsfBigHeader::size() == 0x38);
+
+#[cfg(test)]
+mod tests {
+    use super::MsfBigHeader;
+    
+    #[test]
+    fn pdb_test1() {
+        assert!(MsfBigHeader::from(include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/bins/HelloWorld.exe"
+        )))
+        .is_none());
+        assert!(MsfBigHeader::from(include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/bins/HelloWorld.pdb"
+        )))
+        .is_some());
+    }
+}

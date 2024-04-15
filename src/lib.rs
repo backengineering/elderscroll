@@ -5,3 +5,5 @@
 
 pub mod msf;
 pub mod overlays;
+pub mod pagelist;
+pub mod directory;
