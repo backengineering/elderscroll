@@ -3,7 +3,7 @@
 // Unauthorized copying of this file, via any medium is strictly prohibited
 // Proprietary and confidential
 
-use crate::pagelist::PageList;
+use crate::{msf::MsfBigHeaderMut, pagelist::PageList};
 
 /// This is a linear view of a bunch of pages.
 #[derive(Debug, Default, Clone)]
@@ -17,16 +17,16 @@ pub struct SourceView {
 impl SourceView {
     /// Creates a linear view of the pages, flush will write them back.
     pub fn new(buff: &[u8], pages: PageList) -> Option<SourceView> {
-        let len = pages.source_slices.iter().fold(0, |acc, s| acc + s.size);
+        let len = pages.source_slices.len() as usize * pages.page_size as usize;
         let mut bytes = Vec::with_capacity(len);
         bytes.resize(len, 0);
         let mut current_offset = 0;
         for slice in &pages.source_slices {
-            if slice.offset as usize + slice.size > buff.len() {
+            if slice.offset as usize + slice.size as usize > buff.len() {
                 return None;
             }
-            let slice_end = slice.offset as usize + slice.size;
-            bytes[current_offset..current_offset + slice.size]
+            let slice_end = slice.offset as usize + slice.size as usize;
+            bytes[current_offset as usize..current_offset as usize + slice.size as usize]
                 .copy_from_slice(&buff[slice.offset as usize..slice_end]);
             current_offset += slice.size;
         }
@@ -43,8 +43,10 @@ impl SourceView {
         &mut self.bytes
     }
     /// This function will flush the internal mapping back
-    /// to the correct pages in "buff".
-    pub fn flush(&mut self, buff: &mut [u8]) {
+    /// to the correct pages in "buff". It will also update the page count
+    /// inside of the MSF header so that other flushes which add more pages
+    /// will work correctly.
+    pub fn flush(&mut self, buff: &mut [u8], header: &mut MsfBigHeaderMut<'_>) {
         unimplemented!()
     }
 }
