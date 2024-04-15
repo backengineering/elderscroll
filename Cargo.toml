@@ -5,4 +5,5 @@ edition = "2021"
 
 [dependencies]
 concat-idents = "1.1.5"
+scroll = "0.12.0"
 static_assertions = "1.1.0"

@@ -3,9 +3,12 @@
 // Unauthorized copying of this file, via any medium is strictly prohibited
 // Proprietary and confidential
 
-use std::f32::consts::E;
+use std::str::FromStr;
 
-use crate::{pagelist::PageList, struct_overlay_both};
+use crate::{
+    directory::StreamDirectory, pagelist::PageList, struct_overlay_both, view::SourceView,
+};
+use scroll::{ctx, Error, Pread};
 use static_assertions::const_assert;
 
 /// Magic bytes of the PDB file format 7.0
@@ -56,6 +59,24 @@ impl<'a> MsfBigHeader<'a> {
             None
         }
     }
+    /// Find and parse the stream directory
+    pub fn get_stream_directory(&self) -> Result<StreamDirectory, Error> {
+        // Get the page that contains page numbers for each page that the
+        // stream directory uses. (Yes the stream directory might need multiple pages.)
+        let stream_block_map = &self.ptr[self.get_stream_block_map() as usize..];
+        let num_pages = self.pages_needed_to_store(self.get_stream_dir_size());
+        let mut offset = 0;
+        let mut pages = PageList::new(self.get_page_size() as usize);
+        // Now read all of the page numbers needed into a PageList.
+        for _ in 0..num_pages {
+            pages.push(stream_block_map.gread::<u32>(&mut offset)?);
+        }
+        // Map the pages to a linear sequence of bytes.
+        let view = SourceView::new(&self.ptr, pages)
+            .ok_or_else(|| Error::Custom("Failed to parse stream directory!".to_string()))?;
+
+        todo!();
+    }
     /// How many pages are required to store N amount of bytes?
     pub fn pages_needed_to_store(&self, bytes: u32) -> u32 {
         (bytes + (self.get_page_size() - 1)) / self.get_page_size()
@@ -67,7 +88,7 @@ const_assert!(MsfBigHeader::size() == 0x38);
 #[cfg(test)]
 mod tests {
     use super::MsfBigHeader;
-    
+
     #[test]
     fn pdb_test1() {
         assert!(MsfBigHeader::from(include_bytes!(concat!(
