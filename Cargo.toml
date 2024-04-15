@@ -1,0 +1,7 @@
+[package]
+name = "elderscroll"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+concat-idents = "1.1.5"
