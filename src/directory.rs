@@ -15,18 +15,6 @@ pub const INVALID_STREAM_INDEX: u16 = 0xFFFF;
 pub const INVALID_STREAM_SIZE: u32 = u32::MAX;
 pub const DBI_STREAM_INDEX: usize = 3;
 
-/// Stream index abstraction which offers a "is_valid"
-/// To ensure that the stream index is OK.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct StreamIndex(pub u16);
-
-impl StreamIndex {
-    /// Returns true if stream index is not INVALID_STREAM_INDEX
-    pub fn is_valid(&self) -> bool {
-        self.0 != INVALID_STREAM_INDEX
-    }
-}
-
 /// Abstraction of the stream itself.
 #[derive(Debug, Default, Clone)]
 pub struct Stream {
@@ -37,9 +25,11 @@ pub struct Stream {
     pub view: SourceView,
 }
 
+/// Abstraction of the stream directory.
 #[derive(Debug, Default, Clone)]
 pub struct StreamDirectory {
-    /// Abstract lifted view of every stream, sorted by StreamIndex.
+    /// Abstract lifted view of every stream, this stream is sorted.
+    /// So you can index into it with the stream index.
     pub streams: Vec<Stream>,
     /// Linear mapping of the pages used for the StreamDirectory.
     pub view: SourceView,

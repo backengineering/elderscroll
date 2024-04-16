@@ -9,3 +9,4 @@ pub mod msf;
 pub mod overlays;
 pub mod pagelist;
 pub mod view;
+pub mod omap;

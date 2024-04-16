@@ -109,11 +109,15 @@ const_assert!(MsfBigHeader::size() == 0x38);
 
 #[cfg(test)]
 mod tests {
+    use scroll::{Pread, Pwrite};
+
     use super::MsfBigHeader;
     use crate::{
-        dbi::DbiStream,
+        dbi::{DbiStream, DbiStreamHeader},
         directory::{Stream, DBI_STREAM_INDEX, INVALID_STREAM_SIZE},
         msf::MsfBigHeaderMut,
+        omap::{OmapEntry, OmapStream},
+        pagelist::PageList,
         view::SourceView,
     };
     use std::fs;
@@ -205,7 +209,7 @@ mod tests {
     }
 
     #[test]
-    fn dbi_stream_test() {
+    fn omap_test1() {
         let bytes = include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/tests/bins/HelloWorld.pdb"
@@ -216,11 +220,110 @@ mod tests {
         assert!(dbi_stream.original_stream_size != INVALID_STREAM_SIZE);
         println!("StreamDirectoryMap: {:X}", header.stream_block_map());
         let mut dbi = DbiStream::new(dbi_stream);
+
+        let dbi_header = dbi.header().unwrap();
+        let mut offset = (DbiStreamHeader::size() as u32
+            + (dbi_header.get_mod_info_size() + dbi_header.get_section_contribution_size()))
+            as usize;
+
+        // No more section maps.
+        let cnt1 = dbi
+            .stream
+            .view
+            .as_mut_slice()
+            .gwrite::<u16>(0, &mut offset)
+            .unwrap();
+
+        let cnt2 = dbi
+            .stream
+            .view
+            .as_mut_slice()
+            .gwrite::<u16>(0, &mut offset)
+            .unwrap();
+
+        println!("cnt1: {} cnt2: {}", cnt1, cnt2);
+
         // Set original section headers the same as the "section headers" stream.
         let mut extras = dbi.extra_streams_mut().unwrap();
         extras.set_original_section_headers(extras.get_section_headers());
+        // Set the omap to src.
+        let omap_stream_index = stream_directory.streams.len();
+        extras.set_omap_to_src(omap_stream_index as u16);
+        let mut omap_stream = OmapStream::default();
+        // omap_stream.0.insert(OmapEntry(0x0, 0x0));
+        omap_stream.0.insert(OmapEntry(0x1008, 0x1000));
+        omap_stream.0.insert(OmapEntry(0x100f, 0x1007));
+        omap_stream.0.insert(OmapEntry(0x1010, 0x1010));
+        //omap_stream.0.insert(OmapEntry(0x1010, 0x1010));
+        // omap_stream.0.insert(OmapEntry(0x100a, 0x1000));
+        // omap_stream.0.insert(OmapEntry(0x100b, 0x100b));
+        let omap_bytes = omap_stream.to_vec().unwrap();
+
+        // Omap to src.
+        stream_directory.streams.push(Stream {
+            original_stream_size: Default::default(),
+            view: SourceView {
+                bytes: omap_bytes,
+                pages: PageList::new(header.get_page_size()),
+            },
+        });
+
+        // Omap from src
+        let omap_stream_index2 = stream_directory.streams.len();
+        extras.set_omap_from_src(omap_stream_index2 as u16);
+        let mut omap_stream2 = OmapStream::default();
+        // omap_stream.0.insert(OmapEntry(0x0, 0x0));
+        omap_stream2.0.insert(OmapEntry(0x1000, 0x1008));
+        omap_stream2.0.insert(OmapEntry(0x1007, 0x100f));
+        omap_stream2.0.insert(OmapEntry(0x1010, 0x1010));
+        let omap_bytes2 = omap_stream2.to_vec().unwrap();
+        eprintln!("bytes: {:X?}", omap_bytes2);
+        stream_directory.streams.push(Stream {
+            original_stream_size: Default::default(),
+            view: SourceView {
+                bytes: omap_bytes2,
+                pages: PageList::new(header.get_page_size()),
+            },
+        });
+
         stream_directory.streams[DBI_STREAM_INDEX] = dbi.stream;
 
+        let mut result = bytes.to_vec();
+        let mut header_bytes = Vec::<u8>::new();
+        header_bytes.resize(MsfBigHeaderMut::size(), 0);
+        header_bytes.copy_from_slice(&result[0..MsfBigHeaderMut::size()]);
+        let mut header = MsfBigHeaderMut::new(&mut header_bytes).unwrap();
+        stream_directory.flush(&mut result, &mut header).unwrap();
+        header.flush(&mut result);
+
+        assert_eq!(
+            header.get_num_pages() * header.get_page_size(),
+            result.len() as u32
+        );
+
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/bins/HelloWorld_new.pdb"
+            ))
+            .unwrap();
+
+        file.write_all(&result).unwrap();
+    }
+
+    #[test]
+    fn dbi_stream_test() {
+        let bytes = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/bins/HelloWorld.pdb"
+        ));
+        let header = MsfBigHeader::from(bytes).unwrap();
+        let mut stream_directory = header.get_stream_directory(bytes).unwrap();
+        let dbi_stream = stream_directory.streams[DBI_STREAM_INDEX].clone();
+        assert!(dbi_stream.original_stream_size != INVALID_STREAM_SIZE);
+        println!("StreamDirectoryMap: {:X}", header.stream_block_map());
         let mut result = bytes.to_vec();
         let mut header_bytes = Vec::<u8>::new();
         header_bytes.resize(MsfBigHeaderMut::size(), 0);
