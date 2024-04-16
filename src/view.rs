@@ -47,7 +47,7 @@ impl SourceView {
     /// to the correct pages in "buff". It will also update the page count
     /// inside of the MSF header so that other flushes which add more pages
     /// will work correctly.
-    pub fn flush(&mut self, buff: &mut [u8], header: &mut MsfBigHeaderMut<'_>) -> Option<()> {
+    pub fn flush(&mut self, buff: &mut Vec<u8>, header: &mut MsfBigHeaderMut<'_>) {
         // If we need more pages we need to allocate them now.
         if self.bytes.len() > self.pages.len() as usize {
             let cnt_new_pages =
@@ -58,16 +58,15 @@ impl SourceView {
             }
             // Update page count now.
             header.set_num_pages(high_pfn + cnt_new_pages);
+            buff.resize(
+                buff.len() + (cnt_new_pages * header.get_page_size()) as usize,
+                0,
+            );
         }
         // Now we need to write bytes back to the file at the correct pages.
         let mut current_offset = 0;
         for pfn in self.pages.pfns.iter() {
             let page_start = *pfn as usize * self.pages.page_size as usize;
-            let page_end = page_start + self.pages.page_size as usize;
-            if page_end > buff.len() {
-                // If the page is out of bounds, return None indicating an error.
-                return None;
-            }
             let bytes_to_copy = std::cmp::min(
                 self.bytes.len() - current_offset,
                 self.pages.page_size as usize,
@@ -76,6 +75,74 @@ impl SourceView {
                 .copy_from_slice(&self.bytes[current_offset..current_offset + bytes_to_copy]);
             current_offset += bytes_to_copy;
         }
-        Some(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SourceView;
+    use crate::{msf::MsfBigHeaderMut, pagelist::PageList};
+
+    // Basic check to know we map 2 pages.
+    #[test]
+    fn test_source_view1() {
+        let mut buff = Vec::<u8>::new();
+        buff.resize(0x5000, 0);
+        let mut pages = PageList::new(0x1000);
+        pages.push(2);
+        pages.push(4);
+        let source = SourceView::new(&buff, pages).unwrap();
+        // Assert we mapped 2 pages.
+        assert_eq!(source.as_slice().len(), 0x2000);
+    }
+
+    /// Make sure if we make changes they flush back correctly.
+    #[test]
+    fn flush_source_view1() {
+        let mut buff = Vec::<u8>::new();
+        buff.resize(0x5000, 0);
+        let mut pages = PageList::new(0x1000);
+        pages.push(2);
+        pages.push(4);
+        let mut source = SourceView::new(&buff, pages).unwrap();
+        source.as_mut_slice()[0..0x1000].fill(0x69);
+        source.as_mut_slice()[0x1000..0x2000].fill(0x42);
+        let mut header_bytes = Vec::<u8>::new();
+        header_bytes.resize(0x1000, 0);
+        let mut header = MsfBigHeaderMut::new(&mut header_bytes).unwrap();
+        header.set_page_size(0x1000);
+        header.set_num_pages(5);
+        source.flush(&mut buff, &mut header);
+        // Make sure the flush actually works.
+        assert!(buff[0x2000..0x3000].iter().all(|&e| e == 0x69));
+        assert!(buff[0x4000..0x5000].iter().all(|&e| e == 0x42));
+    }
+
+    /// Expand the mapping and make sure that it flushes
+    /// back and expands the vector we flush to.
+    #[test]
+    fn flush_source_view2() {
+        let mut buff = Vec::<u8>::new();
+        buff.resize(0x5000, 0);
+        let mut pages = PageList::new(0x1000);
+        pages.push(2);
+        pages.push(4);
+        let mut source = SourceView::new(&buff, pages).unwrap();
+        source.as_mut_slice()[0..0x1000].fill(0x69);
+        source.as_mut_slice()[0x1000..0x2000].fill(0x42);
+        source.bytes.resize(source.bytes.len() + 0x500, 0xFF);
+
+        let mut header_bytes = Vec::<u8>::new();
+        header_bytes.resize(0x1000, 0);
+        let mut header = MsfBigHeaderMut::new(&mut header_bytes).unwrap();
+
+        header.set_page_size(0x1000);
+        header.set_num_pages(5);
+        source.flush(&mut buff, &mut header);
+
+        assert_eq!(header.get_num_pages(), 6);
+        // Make sure the flush actually works.
+        assert!(buff[0x2000..0x3000].iter().all(|&e| e == 0x69));
+        assert!(buff[0x4000..0x5000].iter().all(|&e| e == 0x42));
     }
 }

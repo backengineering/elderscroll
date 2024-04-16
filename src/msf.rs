@@ -3,12 +3,10 @@
 // Unauthorized copying of this file, via any medium is strictly prohibited
 // Proprietary and confidential
 
-use std::str::FromStr;
-
 use crate::{
     directory::StreamDirectory, pagelist::PageList, struct_overlay_both, view::SourceView,
 };
-use scroll::{ctx, Error, Pread};
+use scroll::{Error, Pread};
 use static_assertions::const_assert;
 
 /// Magic bytes of the PDB file format 7.0

@@ -80,7 +80,7 @@ impl StreamDirectory {
     #[inline(always)]
     pub fn flush(
         &mut self,
-        buff: &mut [u8],
+        buff: &mut Vec<u8>,
         header: &mut MsfBigHeaderMut<'_>,
     ) -> Result<(), Error> {
         // Compute the size of the StreamDirectory
@@ -91,10 +91,7 @@ impl StreamDirectory {
         // Compute how many PFN's there are for all streams.
         for stream in self.streams.iter_mut() {
             // Flush stream bytes back now.
-            stream
-                .view
-                .flush(buff, header)
-                .ok_or_else(|| Error::Custom("Failed to flush stream!".to_string()))?;
+            stream.view.flush(buff, header);
             // DWORD for each pfn.
             stream_directory_size += stream.view.pages.pfns.len() as u32 * 4;
         }
@@ -121,9 +118,7 @@ impl StreamDirectory {
             }
         }
         // Flush the stream directory back to the file.
-        self.view
-            .flush(buff, header)
-            .ok_or_else(|| Error::Custom("Failed to flush StreamDirectory".to_string()))?;
+        self.view.flush(buff, header);
         // Finally we need to update the StreamDirectoryMap page.
         let stream_block_map = &mut buff[header.stream_block_map()..];
         // Zero the map page for debug purposes.
