@@ -30,8 +30,9 @@ impl StreamIndex {
 /// Abstraction of the stream itself.
 #[derive(Debug, Default, Clone)]
 pub struct Stream {
-    /// Byte size of stream.
-    pub size: u32,
+    /// Original size of the stream when parsing it. Do not use this or touch it.
+    /// Consider it as READ ONLY.
+    pub original_stream_size: u32,
     /// Linear mapping of the stream.
     pub view: SourceView,
 }
@@ -55,24 +56,25 @@ impl StreamDirectory {
         // Read all of the sizes for each stream.
         for _ in 0..num_streams {
             streams.push(Stream {
-                size: buff.gread::<u32>(&mut offset)?,
+                original_stream_size: buff.gread::<u32>(&mut offset)?,
                 ..Default::default()
             });
         }
         // Read the pages for each stream.
         for stream in streams.iter_mut() {
             // Some streams have no size so there are no PFN's to read.
-            if stream.size != INVALID_STREAM_SIZE {
-                let num_pages = header.pages_needed_to_store(stream.size);
+            if stream.original_stream_size != INVALID_STREAM_SIZE {
+                let num_pages = header.pages_needed_to_store(stream.original_stream_size);
                 let mut pages = PageList::new(header.get_page_size());
                 for _ in 0..num_pages {
                     pages.push(buff.gread::<u32>(&mut offset)?);
                 }
                 // Parse the stream out of the PDB file now.
-                stream.view = SourceView::with_size(bytes, pages, stream.size as usize)
-                    .ok_or_else(|| {
-                        Error::Custom("Failed to create view for streams!".to_string())
-                    })?;
+                stream.view =
+                    SourceView::with_size(bytes, pages, stream.original_stream_size as usize)
+                        .ok_or_else(|| {
+                            Error::Custom("Failed to create view for streams!".to_string())
+                        })?;
             }
         }
         Ok(Self { view, streams })
