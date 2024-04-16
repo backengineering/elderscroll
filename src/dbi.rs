@@ -4,6 +4,7 @@
 // Proprietary and confidential
 
 use crate::{directory::Stream, struct_overlay_both};
+use scroll::{Error, Pwrite};
 use static_assertions::const_assert;
 
 // https://llvm.org/docs/PDB/DbiStream.html#stream-header
@@ -66,6 +67,33 @@ impl DbiStream {
     /// Get a mutable DbiStreamHeader.
     pub fn header_mut(&mut self) -> Option<DbiStreamHeaderMut<'_>> {
         DbiStreamHeaderMut::new(self.stream.view.as_mut_slice())
+    }
+    /// This sets the section map descriptor counts to 0
+    /// https://github.com/getsentry/pdb/issues/17#issuecomment-2055784958
+    /// https://github.com/getsentry/pdb/issues/17#issuecomment-2058271400
+    /// https://llvm.org/docs/PDB/DbiStream.html#section-map-substream
+    /// Sets "Count" and "LogCount" to 0
+    pub fn nop_section_maps(&mut self) -> Result<(), Error> {
+        let dbi_header = self
+            .header()
+            .ok_or_else(|| Error::Custom(format!("Failed to get DbiStreamHeader!")))?;
+
+        let mut offset = (DbiStreamHeader::size() as u32
+            + (dbi_header.get_mod_info_size() + dbi_header.get_section_contribution_size()))
+            as usize;
+
+        // Count = 0
+        self.stream
+            .view
+            .as_mut_slice()
+            .gwrite::<u16>(0, &mut offset)?;
+
+        // LogCount = 0
+        self.stream
+            .view
+            .as_mut_slice()
+            .gwrite::<u16>(0, &mut offset)?;
+        Ok(())
     }
     /// Get the read only extra streams.
     pub fn extra_streams(&self) -> Option<DbiExtraStream<'_>> {
