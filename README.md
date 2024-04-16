@@ -20,7 +20,7 @@ Please use the following links to understand more about the PDB and OMAP:
 - https://learn.microsoft.com/en-us/windows/win32/api/dbghelp/ns-dbghelp-omap#remarks
 - https://github.com/getsentry/pdb/pull/35
 
-This library does not care about anything the PDB that is not related to (re)creating the OMAP streams. If you want to parse a PDB use the `pdb-rs` crate.
+This library does not care about anything in the PDB that is not related to (re)creating the OMAP streams. If you want to parse a PDB use the `pdb-rs` crate. Maybe one day we can merge some of my code into `pdb-rs`.
 
 ### Moving code and OMAP
 
@@ -45,6 +45,8 @@ The PDB contains a method for us to describe how ranges of bytes might have been
 These OMAP streams are defined inside of the "extra streams" header inside of the DBI stream. Most PDB files will not have OMAP streams because their layouts have not been changed. In that case no OMAP streams exist and new ones must be created.
 
 However, its important to note that OMAP streams are NOT the only component of the PDB involved with OMAP translation. There are two streams that contain section headers, one for the original binary and one for the new binary. These streams are also defined in the "extra streams".
+
+There is also a "sections map" sub-stream that is used in address translation. I just zero it out, if that becomes a problem we will [spin the block](https://www.urbandictionary.com/define.php?term=Spin%20the%20block).
 
 ```rust
 struct_overlay_both!((pub DbiExtraStream, pub DbiExtraStreamMut) {
