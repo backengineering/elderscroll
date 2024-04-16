@@ -23,7 +23,7 @@ pub struct PageList {
     /// Valid values are 512, 1024, 2048, and 4096
     pub page_size: u32,
     /// All of the page ranges.
-    pub source_slices: Vec<SourceSlice>,
+    pub pfns: Vec<PageNumber>,
 }
 
 impl PageList {
@@ -31,33 +31,17 @@ impl PageList {
     pub fn new(page_size: u32) -> Self {
         Self {
             page_size,
-            source_slices: Vec::new(),
+            pfns: Vec::new(),
         }
     }
-    /// Return all of the page numbers in order. This i use
-    /// to write data into the pages themselves.
-    pub fn pfns(&self, header: &MsfBigHeader<'_>) -> Vec<PageNumber> {
-        // For each slice just grab the offset's page number. Since each
-        // slice only describes 1 page anyways.
-        Vec::from_iter(
-            self.source_slices
-                .iter()
-                .map(|e| (e.offset / header.get_page_size()) as u32),
-        )
-    }
     /// Add a page to the PageList.
+    #[inline(always)]
     pub fn push(&mut self, page: PageNumber) {
-        self.source_slices.push(SourceSlice {
-            offset: self.page_size * page,
-            size: self.page_size,
-        });
+        self.pfns.push(page);
     }
     /// Return the total length of this PageList.
+    #[inline(always)]
     pub fn len(&self) -> u32 {
-        self.source_slices.iter().fold(0, |acc, s| acc + s.size)
-    }
-    /// Return a slice of SourceSlices.
-    pub fn source_slices(&self) -> &[SourceSlice] {
-        self.source_slices.as_slice()
+        self.pfns.len() as u32 * self.page_size
     }
 }

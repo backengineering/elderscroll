@@ -55,6 +55,11 @@ impl<'a> MsfBigHeaderMut<'a> {
     pub fn pages_needed_to_store(&self, bytes: u32) -> u32 {
         (bytes + (self.get_page_size() - 1)) / self.get_page_size()
     }
+    /// Get the page at which the stream block map exists.
+    #[inline(always)]
+    pub fn stream_block_map(&self) -> usize {
+        (self.get_stream_block_map() * self.get_page_size()) as usize
+    }
 }
 
 impl<'a> MsfBigHeader<'a> {
@@ -91,7 +96,7 @@ impl<'a> MsfBigHeader<'a> {
     pub fn pages_needed_to_store(&self, bytes: u32) -> u32 {
         (bytes + (self.get_page_size() - 1)) / self.get_page_size()
     }
-    /// Get the page at whicht the stream block map exists.
+    /// Get the page at which the stream block map exists.
     #[inline(always)]
     pub fn stream_block_map(&self) -> usize {
         (self.get_stream_block_map() * self.get_page_size()) as usize
@@ -131,7 +136,7 @@ mod tests {
         let header = MsfBigHeader::from(bytes).unwrap();
         let stream_directory = header.get_stream_directory(bytes).unwrap();
         let dbi_stream = stream_directory.get_stream(DBI_STREAM_INDEX).unwrap();
-        assert!(dbi_stream.size != INVALID_STREAM_SIZE);
+        assert!(dbi_stream.original_stream_size != INVALID_STREAM_SIZE);
         let dbi = DbiStream::new(dbi_stream);
         println!("{:#X?}", dbi.extra_streams());
     }

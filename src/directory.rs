@@ -8,7 +8,7 @@ use crate::{
     pagelist::PageList,
     view::SourceView,
 };
-use scroll::{Error, Pread};
+use scroll::{Error, Pread, Pwrite};
 
 /// This is the constant for invalid stream indices.
 pub const INVALID_STREAM_INDEX: u16 = 0xFFFF;
@@ -31,7 +31,7 @@ impl StreamIndex {
 #[derive(Debug, Default, Clone)]
 pub struct Stream {
     /// Byte size of stream.
-    pub size: u32,
+    pub original_stream_size: u32,
     /// Linear mapping of the stream.
     pub view: SourceView,
 }
@@ -55,15 +55,15 @@ impl StreamDirectory {
         // Read all of the sizes for each stream.
         for _ in 0..num_streams {
             streams.push(Stream {
-                size: buff.gread::<u32>(&mut offset)?,
+                original_stream_size: buff.gread::<u32>(&mut offset)?,
                 ..Default::default()
             });
         }
         // Read the pages for each stream.
         for stream in streams.iter_mut() {
             // Some streams have no size so there are no PFN's to read.
-            if stream.size != INVALID_STREAM_SIZE {
-                let num_pages = header.pages_needed_to_store(stream.size);
+            if stream.original_stream_size != INVALID_STREAM_SIZE {
+                let num_pages = header.pages_needed_to_store(stream.original_stream_size);
                 let mut pages = PageList::new(header.get_page_size());
                 for _ in 0..num_pages {
                     pages.push(buff.gread::<u32>(&mut offset)?);
@@ -78,8 +78,62 @@ impl StreamDirectory {
     }
     /// Flush directory back into the file.
     #[inline(always)]
-    pub fn flush(&mut self, buff: &mut [u8], header: &mut MsfBigHeaderMut<'_>) {
-        self.view.flush(buff, header);
+    pub fn flush(
+        &mut self,
+        buff: &mut [u8],
+        header: &mut MsfBigHeaderMut<'_>,
+    ) -> Result<(), Error> {
+        // Compute the size of the StreamDirectory
+        // NumberOfStreams is 4 bytes.
+        let mut stream_directory_size = 4u32;
+        // Each stream needs 4 bytes for its len.
+        stream_directory_size += self.streams.len() as u32 * 4;
+        // Compute how many PFN's there are for all streams.
+        for stream in self.streams.iter_mut() {
+            // Flush stream bytes back now.
+            stream
+                .view
+                .flush(buff, header)
+                .ok_or_else(|| Error::Custom("Failed to flush stream!".to_string()))?;
+            // DWORD for each pfn.
+            stream_directory_size += stream.view.pages.pfns.len() as u32 * 4;
+        }
+        // Update the size of the stream directory.
+        header.set_stream_dir_size(stream_directory_size);
+        // Write the stream directory into the view now.
+        let mut offset = 0;
+        // Resize the mapping of the StreamDirectory.
+        self.view.bytes.resize(stream_directory_size as usize, 0);
+        // Write the number of streams (NumStreams)
+        self.view
+            .bytes
+            .gwrite::<u32>(self.streams.len() as u32, &mut offset)?;
+        // Write each streams size now.
+        for stream in self.streams.iter() {
+            self.view
+                .bytes
+                .gwrite::<u32>(stream.view.bytes.len() as u32, &mut offset)?;
+        }
+        // Write each streams pfn now.
+        for stream in self.streams.iter() {
+            for pfn in stream.view.pages.pfns.iter() {
+                self.view.bytes.gwrite::<u32>(*pfn, &mut offset)?;
+            }
+        }
+        // Flush the stream directory back to the file.
+        self.view
+            .flush(buff, header)
+            .ok_or_else(|| Error::Custom("Failed to flush StreamDirectory".to_string()))?;
+        // Finally we need to update the StreamDirectoryMap page.
+        let stream_block_map = &mut buff[header.stream_block_map()..];
+        // Zero the map page for debug purposes.
+        stream_block_map[0..header.get_page_size() as usize].fill(0);
+        // Write the PFN's used by the StreamDirectory
+        let mut offset = 0;
+        for pfn in self.view.pages.pfns.iter() {
+            stream_block_map.gwrite::<u32>(*pfn, &mut offset)?;
+        }
+        Ok(())
     }
     /// Returns the number of streams.
     #[inline(always)]

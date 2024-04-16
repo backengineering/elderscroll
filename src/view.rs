@@ -9,26 +9,27 @@ use crate::{msf::MsfBigHeaderMut, pagelist::PageList};
 #[derive(Debug, Default, Clone)]
 pub struct SourceView {
     /// linear sequence of bytes in order.
-    bytes: Vec<u8>,
+    pub bytes: Vec<u8>,
     /// The pages associated with this view.
-    pages: PageList,
+    pub pages: PageList,
 }
 
 impl SourceView {
     /// Creates a linear view of the pages, flush will write them back.
     pub fn new(buff: &[u8], pages: PageList) -> Option<SourceView> {
-        let len = pages.source_slices.len() as usize * pages.page_size as usize;
+        let len = pages.pfns.len() as usize * pages.page_size as usize;
         let mut bytes = Vec::with_capacity(len);
         bytes.resize(len, 0);
         let mut current_offset = 0;
-        for slice in &pages.source_slices {
-            if slice.offset as usize + slice.size as usize > buff.len() {
+        for pfn in &pages.pfns {
+            let page = pfn * pages.page_size;
+            if page > buff.len() as u32 {
                 return None;
             }
-            let slice_end = slice.offset as usize + slice.size as usize;
-            bytes[current_offset as usize..current_offset as usize + slice.size as usize]
-                .copy_from_slice(&buff[slice.offset as usize..slice_end]);
-            current_offset += slice.size;
+            let slice_end = page + pages.page_size;
+            bytes[current_offset as usize..current_offset as usize + pages.page_size as usize]
+                .copy_from_slice(&buff[page as usize..slice_end as usize]);
+            current_offset += pages.page_size;
         }
         Some(SourceView { bytes, pages })
     }
@@ -60,8 +61,8 @@ impl SourceView {
         }
         // Now we need to write bytes back to the file at the correct pages.
         let mut current_offset = 0;
-        for page_num in self.pages.source_slices.iter() {
-            let page_start = page_num.offset as usize * self.pages.page_size as usize;
+        for pfn in self.pages.pfns.iter() {
+            let page_start = *pfn as usize * self.pages.page_size as usize;
             let page_end = page_start + self.pages.page_size as usize;
             if page_end > buff.len() {
                 // If the page is out of bounds, return None indicating an error.
