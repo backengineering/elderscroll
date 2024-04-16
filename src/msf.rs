@@ -156,16 +156,7 @@ impl BigMsf {
 #[cfg(test)]
 mod tests {
     use super::MsfBigHeader;
-    use crate::{
-        dbi::{DbiStream, DbiStreamHeader},
-        directory::{Stream, DBI_STREAM_INDEX, INVALID_STREAM_SIZE},
-        msf::{BigMsf, MsfBigHeaderMut},
-        omap::{OmapEntry, OmapStream},
-        pagelist::PageList,
-        view::SourceView,
-    };
-    use std::fs;
-    use std::io::Write;
+    use crate::msf::BigMsf;
 
     #[test]
     fn header_test1() {
@@ -189,6 +180,9 @@ mod tests {
         ));
         let msf = BigMsf::new(bytes.to_vec());
         let header = msf.header().unwrap();
-        assert_eq!(msf.bytes.len() as u32, header.get_page_size() * header.get_num_pages());
+        assert_eq!(
+            msf.bytes.len() as u32,
+            header.get_page_size() * header.get_num_pages()
+        );
     }
 }

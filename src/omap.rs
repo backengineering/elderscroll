@@ -23,6 +23,7 @@ impl Ord for OmapEntry {
 pub struct OmapStream(pub BTreeSet<OmapEntry>);
 
 impl OmapStream {
+    /// Convert the Omap stream to bytes.
     pub fn to_vec(&self) -> Result<Vec<u8>, Error> {
         let mut buff = vec![0u8; self.0.len() * 8];
         let mut offset = 0;
