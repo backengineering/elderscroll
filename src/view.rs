@@ -46,7 +46,35 @@ impl SourceView {
     /// to the correct pages in "buff". It will also update the page count
     /// inside of the MSF header so that other flushes which add more pages
     /// will work correctly.
-    pub fn flush(&mut self, buff: &mut [u8], header: &mut MsfBigHeaderMut<'_>) {
-        unimplemented!()
+    pub fn flush(&mut self, buff: &mut [u8], header: &mut MsfBigHeaderMut<'_>) -> Option<()> {
+        // If we need more pages we need to allocate them now.
+        if self.bytes.len() > self.pages.len() as usize {
+            let cnt_new_pages =
+                header.pages_needed_to_store(self.bytes.len() as u32 - self.pages.len());
+            let high_pfn = header.get_num_pages();
+            for pfn in high_pfn..high_pfn + cnt_new_pages {
+                self.pages.push(pfn);
+            }
+            // Update page count now.
+            header.set_num_pages(high_pfn + cnt_new_pages);
+        }
+        // Now we need to write bytes back to the file at the correct pages.
+        let mut current_offset = 0;
+        for page_num in self.pages.source_slices.iter() {
+            let page_start = page_num.offset as usize * self.pages.page_size as usize;
+            let page_end = page_start + self.pages.page_size as usize;
+            if page_end > buff.len() {
+                // If the page is out of bounds, return None indicating an error.
+                return None;
+            }
+            let bytes_to_copy = std::cmp::min(
+                self.bytes.len() - current_offset,
+                self.pages.page_size as usize,
+            );
+            buff[page_start..page_start + bytes_to_copy]
+                .copy_from_slice(&self.bytes[current_offset..current_offset + bytes_to_copy]);
+            current_offset += bytes_to_copy;
+        }
+        Some(())
     }
 }

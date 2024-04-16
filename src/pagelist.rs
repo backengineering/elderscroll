@@ -34,7 +34,6 @@ impl PageList {
             source_slices: Vec::new(),
         }
     }
-
     /// Return all of the page numbers in order. This i use
     /// to write data into the pages themselves.
     pub fn pfns(&self, header: &MsfBigHeader<'_>) -> Vec<PageNumber> {
@@ -46,7 +45,6 @@ impl PageList {
                 .map(|e| (e.offset / header.get_page_size()) as u32),
         )
     }
-
     /// Add a page to the PageList.
     pub fn push(&mut self, page: PageNumber) {
         self.source_slices.push(SourceSlice {
@@ -54,12 +52,10 @@ impl PageList {
             size: self.page_size,
         });
     }
-
     /// Return the total length of this PageList.
     pub fn len(&self) -> u32 {
         self.source_slices.iter().fold(0, |acc, s| acc + s.size)
     }
-
     /// Return a slice of SourceSlices.
     pub fn source_slices(&self) -> &[SourceSlice] {
         self.source_slices.as_slice()

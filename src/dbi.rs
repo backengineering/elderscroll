@@ -3,7 +3,7 @@
 // Unauthorized copying of this file, via any medium is strictly prohibited
 // Proprietary and confidential
 
-use crate::struct_overlay_both;
+use crate::{directory::Stream, struct_overlay_both};
 use static_assertions::const_assert;
 
 // https://llvm.org/docs/PDB/DbiStream.html#stream-header
@@ -46,3 +46,53 @@ struct_overlay_both!((pub DbiExtraStream, pub DbiExtraStreamMut) {
     [0x14] original_section_headers: u16,
 });
 const_assert!(DbiExtraStream::size() == 0x16);
+
+/// High level abstraction of the DBI stream.
+#[derive(Debug, Default, Clone)]
+pub struct DbiStream {
+    /// The underlying stream information.
+    stream: Stream,
+}
+
+impl DbiStream {
+    /// Create a new DbiStream from the underlying Stream.
+    pub fn new(stream: Stream) -> Self {
+        Self { stream }
+    }
+    /// Get a read-only DbiStreamHeader.
+    pub fn header(&self) -> Option<DbiStreamHeader<'_>> {
+        DbiStreamHeader::new(self.stream.view.as_slice())
+    }
+    /// Get a mutable DbiStreamHeader.
+    pub fn header_mut(&mut self) -> Option<DbiStreamHeaderMut<'_>> {
+        DbiStreamHeaderMut::new(self.stream.view.as_mut_slice())
+    }
+    /// Get the read only extra streams.
+    pub fn extra_streams(&self) -> Option<DbiExtraStream<'_>> {
+        let header = self.header()?;
+        // Offset of the DbiExtraStream is after all of these substreams.
+        let offset = DbiStreamHeader::size()
+            + (header.get_mod_info_size()
+                + header.get_section_contribution_size()
+                + header.get_section_map_size()
+                + header.get_source_info_size()
+                + header.get_type_server_map_size()
+                + header.get_ec_substream_size()) as usize;
+        Some(DbiExtraStream::new(&self.stream.view.as_slice()[offset..])?)
+    }
+    /// Get a mutable extra streams.
+    pub fn extra_streams_mut(&mut self) -> Option<DbiExtraStreamMut<'_>> {
+        let header = self.header()?;
+        // Offset of the DbiExtraStream is after all of these substreams.
+        let offset = DbiStreamHeader::size()
+            + (header.get_mod_info_size()
+                + header.get_section_contribution_size()
+                + header.get_section_map_size()
+                + header.get_source_info_size()
+                + header.get_type_server_map_size()
+                + header.get_ec_substream_size()) as usize;
+        Some(DbiExtraStreamMut::new(
+            &mut self.stream.view.as_mut_slice()[offset..],
+        )?)
+    }
+}

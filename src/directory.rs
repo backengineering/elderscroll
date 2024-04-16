@@ -3,7 +3,11 @@
 // Unauthorized copying of this file, via any medium is strictly prohibited
 // Proprietary and confidential
 
-use crate::{msf::MsfBigHeader, pagelist::PageList, view::SourceView};
+use crate::{
+    msf::{MsfBigHeader, MsfBigHeaderMut},
+    pagelist::PageList,
+    view::SourceView,
+};
 use scroll::{Error, Pread};
 
 /// This is the constant for invalid stream indices.
@@ -71,6 +75,11 @@ impl StreamDirectory {
             }
         }
         Ok(Self { view, streams })
+    }
+    /// Flush directory back into the file.
+    #[inline(always)]
+    pub fn flush(&mut self, buff: &mut [u8], header: &mut MsfBigHeaderMut<'_>) {
+        self.view.flush(buff, header);
     }
     /// Returns the number of streams.
     #[inline(always)]

@@ -49,6 +49,14 @@ struct_overlay_both!((pub MsfBigHeader, pub MsfBigHeaderMut) {
     [0x34] stream_block_map: u32,
 });
 
+impl<'a> MsfBigHeaderMut<'a> {
+    /// How many pages are required to store N amount of bytes?
+    #[inline(always)]
+    pub fn pages_needed_to_store(&self, bytes: u32) -> u32 {
+        (bytes + (self.get_page_size() - 1)) / self.get_page_size()
+    }
+}
+
 impl<'a> MsfBigHeader<'a> {
     /// Validates the magic bytes in the header.
     pub fn from(bytes: &'a [u8]) -> Option<Self> {
@@ -79,6 +87,7 @@ impl<'a> MsfBigHeader<'a> {
         StreamDirectory::new(buff, view, self)
     }
     /// How many pages are required to store N amount of bytes?
+    #[inline(always)]
     pub fn pages_needed_to_store(&self, bytes: u32) -> u32 {
         (bytes + (self.get_page_size() - 1)) / self.get_page_size()
     }
@@ -94,7 +103,10 @@ const_assert!(MsfBigHeader::size() == 0x38);
 #[cfg(test)]
 mod tests {
     use super::MsfBigHeader;
-    use crate::directory::{DBI_STREAM_INDEX, INVALID_STREAM_SIZE};
+    use crate::{
+        dbi::DbiStream,
+        directory::{DBI_STREAM_INDEX, INVALID_STREAM_SIZE},
+    };
 
     #[test]
     fn general_test1() {
@@ -120,5 +132,7 @@ mod tests {
         let stream_directory = header.get_stream_directory(bytes).unwrap();
         let dbi_stream = stream_directory.get_stream(DBI_STREAM_INDEX).unwrap();
         assert!(dbi_stream.size != INVALID_STREAM_SIZE);
+        let dbi = DbiStream::new(dbi_stream);
+        println!("{:#X?}", dbi.extra_streams());
     }
 }
