@@ -215,6 +215,11 @@ mod tests {
         let dbi_stream = stream_directory.streams[DBI_STREAM_INDEX].clone();
         assert!(dbi_stream.original_stream_size != INVALID_STREAM_SIZE);
         println!("StreamDirectoryMap: {:X}", header.stream_block_map());
+        let mut dbi = DbiStream::new(dbi_stream);
+        // Set original section headers the same as the "section headers" stream.
+        let mut extras = dbi.extra_streams_mut().unwrap();
+        extras.set_original_section_headers(extras.get_section_headers());
+        stream_directory.streams[DBI_STREAM_INDEX] = dbi.stream;
 
         let mut result = bytes.to_vec();
         let mut header_bytes = Vec::<u8>::new();

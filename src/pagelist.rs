@@ -3,7 +3,7 @@
 // Unauthorized copying of this file, via any medium is strictly prohibited
 // Proprietary and confidential
 
-use crate::msf::{MsfBigHeader, PageNumber};
+use crate::msf::PageNumber;
 
 /// Represents an offset + size of the source file.
 ///

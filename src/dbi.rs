@@ -51,7 +51,7 @@ const_assert!(DbiExtraStream::size() == 0x16);
 #[derive(Debug, Default, Clone)]
 pub struct DbiStream {
     /// The underlying stream information.
-    stream: Stream,
+    pub stream: Stream,
 }
 
 impl DbiStream {
