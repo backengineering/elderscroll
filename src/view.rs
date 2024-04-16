@@ -15,8 +15,15 @@ pub struct SourceView {
 }
 
 impl SourceView {
+    /// Create a source with its known size.
+    pub fn with_size(buff: &[u8], pages: PageList, size: usize) -> Option<SourceView> {
+        Self::new(buff, pages).map(|mut view| {
+            view.bytes.resize(size, 0);
+            view
+        })
+    }
     /// Creates a linear view of the pages, flush will write them back.
-    pub fn new(buff: &[u8], pages: PageList) -> Option<SourceView> {
+    fn new(buff: &[u8], pages: PageList) -> Option<SourceView> {
         let len = pages.pfns.len() as usize * pages.page_size as usize;
         let mut bytes = Vec::with_capacity(len);
         bytes.resize(len, 0);

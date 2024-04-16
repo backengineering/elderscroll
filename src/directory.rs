@@ -13,12 +13,12 @@ use scroll::{Error, Pread, Pwrite};
 /// This is the constant for invalid stream indices.
 pub const INVALID_STREAM_INDEX: u16 = 0xFFFF;
 pub const INVALID_STREAM_SIZE: u32 = u32::MAX;
-pub const DBI_STREAM_INDEX: StreamIndex = StreamIndex(3);
+pub const DBI_STREAM_INDEX: usize = 3;
 
 /// Stream index abstraction which offers a "is_valid"
 /// To ensure that the stream index is OK.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct StreamIndex(u16);
+pub struct StreamIndex(pub u16);
 
 impl StreamIndex {
     /// Returns true if stream index is not INVALID_STREAM_INDEX
@@ -31,7 +31,7 @@ impl StreamIndex {
 #[derive(Debug, Default, Clone)]
 pub struct Stream {
     /// Byte size of stream.
-    pub original_stream_size: u32,
+    pub size: u32,
     /// Linear mapping of the stream.
     pub view: SourceView,
 }
@@ -39,9 +39,9 @@ pub struct Stream {
 #[derive(Debug, Default, Clone)]
 pub struct StreamDirectory {
     /// Abstract lifted view of every stream, sorted by StreamIndex.
-    streams: Vec<Stream>,
+    pub streams: Vec<Stream>,
     /// Linear mapping of the pages used for the StreamDirectory.
-    view: SourceView,
+    pub view: SourceView,
 }
 
 impl StreamDirectory {
@@ -55,23 +55,24 @@ impl StreamDirectory {
         // Read all of the sizes for each stream.
         for _ in 0..num_streams {
             streams.push(Stream {
-                original_stream_size: buff.gread::<u32>(&mut offset)?,
+                size: buff.gread::<u32>(&mut offset)?,
                 ..Default::default()
             });
         }
         // Read the pages for each stream.
         for stream in streams.iter_mut() {
             // Some streams have no size so there are no PFN's to read.
-            if stream.original_stream_size != INVALID_STREAM_SIZE {
-                let num_pages = header.pages_needed_to_store(stream.original_stream_size);
+            if stream.size != INVALID_STREAM_SIZE {
+                let num_pages = header.pages_needed_to_store(stream.size);
                 let mut pages = PageList::new(header.get_page_size());
                 for _ in 0..num_pages {
                     pages.push(buff.gread::<u32>(&mut offset)?);
                 }
                 // Parse the stream out of the PDB file now.
-                stream.view = SourceView::new(bytes, pages).ok_or_else(|| {
-                    Error::Custom("Failed to create view for streams!".to_string())
-                })?;
+                stream.view = SourceView::with_size(bytes, pages, stream.size as usize)
+                    .ok_or_else(|| {
+                        Error::Custom("Failed to create view for streams!".to_string())
+                    })?;
             }
         }
         Ok(Self { view, streams })
@@ -107,9 +108,13 @@ impl StreamDirectory {
             .gwrite::<u32>(self.streams.len() as u32, &mut offset)?;
         // Write each streams size now.
         for stream in self.streams.iter() {
-            self.view
-                .bytes
-                .gwrite::<u32>(stream.view.bytes.len() as u32, &mut offset)?;
+            if stream.view.bytes.is_empty() {
+                self.view.bytes.gwrite::<u32>(u32::MAX, &mut offset)?;
+            } else {
+                self.view
+                    .bytes
+                    .gwrite::<u32>(stream.view.bytes.len() as u32, &mut offset)?;
+            }
         }
         // Write each streams pfn now.
         for stream in self.streams.iter() {
@@ -129,29 +134,5 @@ impl StreamDirectory {
             stream_block_map.gwrite::<u32>(*pfn, &mut offset)?;
         }
         Ok(())
-    }
-    /// Returns the number of streams.
-    #[inline(always)]
-    pub fn number_of_streams(&self) -> u16 {
-        self.streams.len() as u16
-    }
-    /// Getter for a stream with a stream index check.
-    #[inline(always)]
-    pub fn get_stream(&self, idx: StreamIndex) -> Option<Stream> {
-        if idx.is_valid() {
-            Some(self.streams[idx.0 as usize].clone())
-        } else {
-            None
-        }
-    }
-    /// Setter for a stream with a stream index check.
-    #[inline(always)]
-    pub fn set_stream(&mut self, idx: StreamIndex, stream: Stream) -> Option<()> {
-        if idx.is_valid() {
-            self.streams[idx.0 as usize] = stream;
-            Some(())
-        } else {
-            None
-        }
     }
 }

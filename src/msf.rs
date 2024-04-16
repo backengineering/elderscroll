@@ -58,6 +58,11 @@ impl<'a> MsfBigHeaderMut<'a> {
     pub fn stream_block_map(&self) -> usize {
         (self.get_stream_block_map() * self.get_page_size()) as usize
     }
+    /// Flush header to the buffer.
+    #[inline(always)]
+    pub fn flush(&self, buff: &mut Vec<u8>) {
+        buff[0..Self::size()].copy_from_slice(&self.ptr);
+    }
 }
 
 impl<'a> MsfBigHeader<'a> {
@@ -82,10 +87,9 @@ impl<'a> MsfBigHeader<'a> {
         for _ in 0..num_pages {
             pages.push(stream_block_map.gread::<u32>(&mut offset)?);
         }
-        // Map the pages to a linear sequence of bytes.
-        let view = SourceView::new(buff, pages)
+        // Map the pages to a linear sequence of bytes with a known size.
+        let view = SourceView::with_size(buff, pages, self.get_stream_dir_size() as usize)
             .ok_or_else(|| Error::Custom("Failed to parse stream directory!".to_string()))?;
-
         // Parse the stream directory and return it.
         StreamDirectory::new(buff, view, self)
     }
@@ -109,7 +113,10 @@ mod tests {
     use crate::{
         dbi::DbiStream,
         directory::{DBI_STREAM_INDEX, INVALID_STREAM_SIZE},
+        msf::MsfBigHeaderMut,
     };
+    use std::fs;
+    use std::io::Write;
 
     #[test]
     fn general_test1() {
@@ -126,16 +133,57 @@ mod tests {
     }
 
     #[test]
+    fn new_pdb_test() {
+        let bytes = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/bins/HelloWorld_new.pdb"
+        ));
+        let header = MsfBigHeader::from(bytes).unwrap();
+        let stream_directory = header.get_stream_directory(bytes).unwrap();
+        println!(
+            "StreamDirectory PageList: {:#X?}",
+            stream_directory.view.pages
+        );
+        let dbi_stream = stream_directory.streams[DBI_STREAM_INDEX].clone();
+        assert!(dbi_stream.size != INVALID_STREAM_SIZE);
+        let dbi = DbiStream::new(dbi_stream);
+        println!("{:#X?}", dbi.extra_streams().unwrap());
+    }
+
+    #[test]
     fn dbi_stream_test() {
         let bytes = include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/tests/bins/HelloWorld.pdb"
         ));
         let header = MsfBigHeader::from(bytes).unwrap();
-        let stream_directory = header.get_stream_directory(bytes).unwrap();
-        let dbi_stream = stream_directory.get_stream(DBI_STREAM_INDEX).unwrap();
-        assert!(dbi_stream.original_stream_size != INVALID_STREAM_SIZE);
-        let dbi = DbiStream::new(dbi_stream);
-        println!("{:#X?}", dbi.extra_streams());
+        let mut stream_directory = header.get_stream_directory(bytes).unwrap();
+        let dbi_stream = stream_directory.streams[DBI_STREAM_INDEX].clone();
+        assert!(dbi_stream.size != INVALID_STREAM_SIZE);
+        println!("StreamDirectoryMap: {:X}", header.stream_block_map());
+
+        let mut result = bytes.to_vec();
+        let mut header_bytes = Vec::<u8>::new();
+        header_bytes.resize(MsfBigHeaderMut::size(), 0);
+        header_bytes.copy_from_slice(&result[0..MsfBigHeaderMut::size()]);
+        let mut header = MsfBigHeaderMut::new(&mut header_bytes).unwrap();
+        stream_directory.flush(&mut result, &mut header).unwrap();
+        header.flush(&mut result);
+
+        assert_eq!(
+            header.get_num_pages() * header.get_page_size(),
+            result.len() as u32
+        );
+
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/bins/HelloWorld_new.pdb"
+            ))
+            .unwrap();
+
+        file.write_all(&result).unwrap();
     }
 }
