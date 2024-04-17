@@ -156,7 +156,11 @@ impl BigMsf {
 #[cfg(test)]
 mod tests {
     use super::MsfBigHeader;
-    use crate::msf::BigMsf;
+    use crate::{
+        dbi::{self, DbiStream, DbiStreamHeaderOverlay, ModInfoOverlay},
+        directory::DBI_STREAM_INDEX,
+        msf::BigMsf,
+    };
 
     #[test]
     fn header_test1() {
@@ -184,5 +188,45 @@ mod tests {
             msf.bytes.len() as u32,
             header.get_page_size() * header.get_num_pages()
         );
+    }
+
+    #[test]
+    fn mod_info_test() {
+        let bytes = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/bins/HelloWorld.pdb"
+        ));
+        let msf = BigMsf::new(bytes.to_vec());
+        let header = msf.header().unwrap();
+        assert_eq!(
+            msf.bytes.len() as u32,
+            header.get_page_size() * header.get_num_pages()
+        );
+
+        let dir = msf.get_stream_directory().unwrap();
+        let dbi_stream = DbiStream::new(dir.streams[DBI_STREAM_INDEX].clone());
+        let dbi_header = dbi_stream.header().unwrap();
+        println!("DBI Stream Pages: {:#X?}", dbi_stream.stream.view.pages);
+        println!(
+            "Symbol Stream Pages: {:#X?}",
+            dir.streams[dbi_header.get_sym_record_stream() as usize]
+                .clone()
+                .view
+                .pages
+        );
+
+        let modinfo1 = ModInfoOverlay::new(
+            &dbi_stream.stream.view.as_slice()[DbiStreamHeaderOverlay::size()..],
+        )
+        .unwrap();
+
+        println!(
+            "C11ByteSize: {} C13ByteSize: {}",
+            modinfo1.get_c11_byte_size(),
+            modinfo1.get_c13_byte_size()
+        );
+
+        let stream = dir.streams[modinfo1.get_module_sym_stream() as usize].clone();
+        println!("ModuleSymStream: {:#X?}", stream.view.pages);
     }
 }

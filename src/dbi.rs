@@ -8,8 +8,8 @@ use scroll::{Error, Pwrite};
 use static_assertions::const_assert;
 
 // https://llvm.org/docs/PDB/DbiStream.html#stream-header
-struct_overlay_both!((pub DbiStreamHeader, pub DbiStreamHeaderMut) {
-    [0x00] version: i32,
+struct_overlay_both!((pub DbiStreamHeaderOverlay, pub DbiStreamHeaderOverlayMut) {
+    [0x00] version: u32,
     [0x04] version_header: u32,
     [0x08] age: u32,
     [0x0C] global_stream_index: u16,
@@ -30,10 +30,10 @@ struct_overlay_both!((pub DbiStreamHeader, pub DbiStreamHeaderMut) {
     [0x3A] machine: u16,
     [0x3C] padding: u32,
 });
-const_assert!(DbiStreamHeader::size() == 0x40);
+const_assert!(DbiStreamHeaderOverlay::size() == 0x40);
 
 // https://llvm.org/docs/PDB/DbiStream.html#optional-debug-header-stream
-struct_overlay_both!((pub DbiExtraStream, pub DbiExtraStreamMut) {
+struct_overlay_both!((pub DbiExtraStreamOverlay, pub DbiExtraStreamOverlayMut) {
     [0x00] fpo_data: u16,
     [0x02] exception_data: u16,
     [0x04] fixup_data: u16,
@@ -46,7 +46,27 @@ struct_overlay_both!((pub DbiExtraStream, pub DbiExtraStreamMut) {
     [0x12] fpo2_data: u16,
     [0x14] original_section_headers: u16,
 });
-const_assert!(DbiExtraStream::size() == 0x16);
+const_assert!(DbiExtraStreamOverlay::size() == 0x16);
+
+// https://llvm.org/docs/PDB/DbiStream.html#dbi-mod-info-substream
+struct_overlay_both!((pub ModInfoOverlay, pub ModInfoOverlayMut) {
+    [0x00] unused1: u32,
+    [0x04] section: u16,
+    [0x06] padding1: [u8; 2],
+    [0x08] offset: i32,
+    [0x0C] size: i32,
+    [0x10] characteristics: u32,
+    [0x14] module_index: u16,
+    [0x16] padding2: [u8; 2],
+    [0x18] data_crc: u32,
+    [0x1C] reloc_crc: u32,
+    [0x20] flags: u16,
+    [0x22] module_sym_stream: u16,
+    [0x24] sym_byte_size: u32,
+    [0x28] c11_byte_size: u32,
+    [0x2C] c13_byte_size: u32,
+});
+const_assert!(ModInfoOverlay::size() == 0x30);
 
 /// High level abstraction of the DBI stream.
 #[derive(Debug, Default, Clone)]
@@ -61,12 +81,12 @@ impl DbiStream {
         Self { stream }
     }
     /// Get a read-only DbiStreamHeader.
-    pub fn header(&self) -> Option<DbiStreamHeader<'_>> {
-        DbiStreamHeader::new(self.stream.view.as_slice())
+    pub fn header(&self) -> Option<DbiStreamHeaderOverlay<'_>> {
+        DbiStreamHeaderOverlay::new(self.stream.view.as_slice())
     }
     /// Get a mutable DbiStreamHeader.
-    pub fn header_mut(&mut self) -> Option<DbiStreamHeaderMut<'_>> {
-        DbiStreamHeaderMut::new(self.stream.view.as_mut_slice())
+    pub fn header_mut(&mut self) -> Option<DbiStreamHeaderOverlayMut<'_>> {
+        DbiStreamHeaderOverlayMut::new(self.stream.view.as_mut_slice())
     }
     /// This sets the section map descriptor counts to 0
     /// https://github.com/getsentry/pdb/issues/17#issuecomment-2055784958
@@ -78,7 +98,7 @@ impl DbiStream {
             .header()
             .ok_or_else(|| Error::Custom(format!("Failed to get DbiStreamHeader!")))?;
 
-        let mut offset = (DbiStreamHeader::size() as u32
+        let mut offset = (DbiStreamHeaderOverlay::size() as u32
             + (dbi_header.get_mod_info_size() + dbi_header.get_section_contribution_size()))
             as usize;
 
@@ -96,30 +116,32 @@ impl DbiStream {
         Ok(())
     }
     /// Get the read only extra streams.
-    pub fn extra_streams(&self) -> Option<DbiExtraStream<'_>> {
+    pub fn extra_streams(&self) -> Option<DbiExtraStreamOverlay<'_>> {
         let header = self.header()?;
         // Offset of the DbiExtraStream is after all of these substreams.
-        let offset = DbiStreamHeader::size()
+        let offset = DbiStreamHeaderOverlay::size()
             + (header.get_mod_info_size()
                 + header.get_section_contribution_size()
                 + header.get_section_map_size()
                 + header.get_source_info_size()
                 + header.get_type_server_map_size()
                 + header.get_ec_substream_size()) as usize;
-        Some(DbiExtraStream::new(&self.stream.view.as_slice()[offset..])?)
+        Some(DbiExtraStreamOverlay::new(
+            &self.stream.view.as_slice()[offset..],
+        )?)
     }
     /// Get a mutable extra streams.
-    pub fn extra_streams_mut(&mut self) -> Option<DbiExtraStreamMut<'_>> {
+    pub fn extra_streams_mut(&mut self) -> Option<DbiExtraStreamOverlayMut<'_>> {
         let header = self.header()?;
         // Offset of the DbiExtraStream is after all of these substreams.
-        let offset = DbiStreamHeader::size()
+        let offset = DbiStreamHeaderOverlay::size()
             + (header.get_mod_info_size()
                 + header.get_section_contribution_size()
                 + header.get_section_map_size()
                 + header.get_source_info_size()
                 + header.get_type_server_map_size()
                 + header.get_ec_substream_size()) as usize;
-        Some(DbiExtraStreamMut::new(
+        Some(DbiExtraStreamOverlayMut::new(
             &mut self.stream.view.as_mut_slice()[offset..],
         )?)
     }

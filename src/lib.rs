@@ -5,6 +5,7 @@
 
 pub mod dbi;
 pub mod directory;
+pub mod label;
 pub mod msf;
 pub mod omap;
 pub mod overlays;

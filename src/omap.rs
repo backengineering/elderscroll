@@ -3,8 +3,9 @@
 // Unauthorized copying of this file, via any medium is strictly prohibited
 // Proprietary and confidential
 
-use scroll::{Error, Pwrite};
-use std::{cmp::Ordering, collections::BTreeSet};
+use crate::directory::Stream;
+use scroll::{Error, Pread};
+use std::cmp::Ordering;
 
 /// (Source -> Target)
 /// Entries are used to map code from one layout to another.
@@ -20,17 +21,38 @@ impl Ord for OmapEntry {
 
 /// OMAP stream, used for both "to" and "from" mappings.
 #[derive(Debug, Default, Clone)]
-pub struct OmapStream(pub BTreeSet<OmapEntry>);
+pub struct OmapStream(Vec<OmapEntry>);
 
 impl OmapStream {
     /// Convert the Omap stream to bytes.
-    pub fn to_vec(&self) -> Result<Vec<u8>, Error> {
-        let mut buff = vec![0u8; self.0.len() * 8];
+    pub fn new(stream: Stream) -> Result<Self, Error> {
+        let mut set = Vec::<OmapEntry>::new();
+        let mut addr = 0;
         let mut offset = 0;
-        for entry in self.0.iter() {
-            buff.gwrite(entry.0, &mut offset)?;
-            buff.gwrite(entry.1, &mut offset)?;
+        loop {
+            let source = stream.view.bytes.gread::<u32>(&mut offset)?;
+            let target = stream.view.bytes.gread::<u32>(&mut offset)?;
+            if addr < source {
+                break;
+            }
+            addr = source;
+            set.push(OmapEntry(source, target));
         }
-        Ok(buff)
+        Ok(Self(set))
+    }
+
+    /// Look up `source_address` to yield a target address.
+    /// if no OMAP range exists for `source_address` it just returns `source_address`.
+    pub fn translate(&self, source_address: u32) -> u32 {
+        let index = match self.0.binary_search_by_key(&source_address, |r| r.0) {
+            Ok(i) => i,
+            Err(0) => return source_address,
+            Err(i) => i - 1,
+        };
+        let record = &self.0[index];
+        if record.1 == 0 {
+            return source_address;
+        }
+        (source_address - record.0) + record.1
     }
 }
