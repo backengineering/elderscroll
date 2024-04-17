@@ -184,7 +184,7 @@ mod tests {
     fn size_test1() {
         let bytes = include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/tests/bins/HelloWorld_new.pdb"
+            "/tests/bins/HelloWorld.pdb"
         ));
         let msf = BigMsf::new(bytes.to_vec());
         let header = msf.header().unwrap();
