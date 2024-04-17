@@ -40,7 +40,6 @@ impl OmapStream {
         }
         Ok(Self(set))
     }
-
     /// Look up `source_address` to yield a target address.
     /// if no OMAP range exists for `source_address` it just returns `source_address`.
     pub fn translate(&self, source_address: u32) -> u32 {

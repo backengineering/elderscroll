@@ -2,13 +2,4 @@
 //
 // Unauthorized copying of this file, via any medium is strictly prohibited
 // Proprietary and confidential
-
-pub mod dbi;
-pub mod directory;
-pub mod label;
-pub mod msf;
-pub mod omap;
-pub mod overlays;
-pub mod pagelist;
-pub mod view;
-pub mod modi;
+// Read: https://llvm.org/docs/PDB/ModiStream.html
