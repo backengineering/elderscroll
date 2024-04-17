@@ -155,10 +155,14 @@ impl BigMsf {
 
 #[cfg(test)]
 mod tests {
+    use std::{fs, io::Write};
+
     use super::MsfBigHeader;
     use crate::{
-        dbi::{self, DbiStream, DbiStreamHeaderOverlay, ModInfoOverlay},
-        directory::DBI_STREAM_INDEX,
+        dbi::{self, DbiStream, DbiStreamHeaderOverlay},
+        directory::{Stream, DBI_STREAM_INDEX, INVALID_STREAM_INDEX},
+        label::LabelSymbol,
+        modi::{ModInfoOverlay, ModInfoOverlayMut, ModiStream},
         msf::BigMsf,
     };
 
@@ -196,37 +200,96 @@ mod tests {
             env!("CARGO_MANIFEST_DIR"),
             "/tests/bins/HelloWorld.pdb"
         ));
-        let msf = BigMsf::new(bytes.to_vec());
+        let mut msf = BigMsf::new(bytes.to_vec());
+        println!("msf size: {}", msf.bytes.len());
         let header = msf.header().unwrap();
+        println!("number of pages: {}", header.get_num_pages());
+        println!("Stream dir bytes: {}", header.get_stream_dir_size());
         assert_eq!(
             msf.bytes.len() as u32,
             header.get_page_size() * header.get_num_pages()
         );
 
-        let dir = msf.get_stream_directory().unwrap();
-        let dbi_stream = DbiStream::new(dir.streams[DBI_STREAM_INDEX].clone());
-        let dbi_header = dbi_stream.header().unwrap();
-        println!("DBI Stream Pages: {:#X?}", dbi_stream.stream.view.pages);
-        println!(
-            "Symbol Stream Pages: {:#X?}",
-            dir.streams[dbi_header.get_sym_record_stream() as usize]
-                .clone()
-                .view
-                .pages
-        );
+        let mut dir = msf.get_stream_directory().unwrap();
+        let mut modi = ModiStream::new(header.get_page_size()).unwrap();
 
-        let modinfo1 = ModInfoOverlay::new(
-            &dbi_stream.stream.view.as_slice()[DbiStreamHeaderOverlay::size()..],
+        modi.add_label(LabelSymbol {
+            offset: 0xB,
+            section: 1,
+            flags: 0,
+            name: r#"TestLabel1"#.to_string(),
+        })
+        .unwrap();
+        modi.add_label(LabelSymbol {
+            offset: 0xC,
+            section: 1,
+            flags: 0,
+            name: r#"TestLabel2"#.to_string(),
+        })
+        .unwrap();
+        modi.add_label(LabelSymbol {
+            offset: 0x7C3,
+            section: 1,
+            flags: 0,
+            name: r#"TestLabel3"#.to_string(),
+        })
+        .unwrap();
+
+        modi.stream
+            .view
+            .bytes
+            .resize(modi.stream.view.bytes.len() + 0x100, 0);
+
+        // Get the ModiStream index and length.
+        let modi_stream_idx = dir.streams.len();
+        let modi_stream_len = modi.stream.view.bytes.len();
+        println!("sream size: {}", modi_stream_len);
+        println!("{:X?}", &modi.stream.view.as_slice()[0..]);
+
+        // Push it to the streams.
+        dir.streams.push(modi.stream);
+
+        // Update the first modules info to this new fake stream.
+        let mut dbi_stream = DbiStream::new(dir.streams[DBI_STREAM_INDEX].clone());
+        dbi_stream
+            .header_mut()
+            .unwrap()
+            .set_global_stream_index(INVALID_STREAM_INDEX);
+        dbi_stream
+            .header_mut()
+            .unwrap()
+            .set_public_stream_index(INVALID_STREAM_INDEX);
+        dbi_stream
+            .header_mut()
+            .unwrap()
+            .set_sym_record_stream(INVALID_STREAM_INDEX);
+        let mut modinfo1 = ModInfoOverlayMut::new(
+            &mut dbi_stream.stream.view.as_mut_slice()[DbiStreamHeaderOverlay::size()..],
         )
         .unwrap();
 
-        println!(
-            "C11ByteSize: {} C13ByteSize: {}",
-            modinfo1.get_c11_byte_size(),
-            modinfo1.get_c13_byte_size()
-        );
+        modinfo1.set_module_sym_stream(modi_stream_idx as u16);
+        modinfo1.set_sym_byte_size(modi_stream_len as u32);
+        modinfo1.set_c11_byte_size(0);
+        modinfo1.set_c13_byte_size(0);
 
-        let stream = dir.streams[modinfo1.get_module_sym_stream() as usize].clone();
-        println!("ModuleSymStream: {:#X?}", stream.view.pages);
+        // eprintln!("ModiInfo: {:#X?}", modinfo1);
+
+        dir.streams[DBI_STREAM_INDEX] = dbi_stream.stream;
+        msf.set_stream_directory(dir).unwrap();
+        println!("num of pages: {}", msf.header().unwrap().get_num_pages());
+        println!(
+            "Stream dir bytes: {}",
+            msf.header().unwrap().get_stream_dir_size()
+        );
+        println!("msf size: {}", msf.bytes.len());
+        // Save file.
+        let mut f1 = std::fs::File::create(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/bins/HelloWorld_new.pdb"
+        ))
+        .unwrap();
+
+        f1.write_all(&msf.bytes).unwrap();
     }
 }

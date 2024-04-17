@@ -48,26 +48,6 @@ struct_overlay_both!((pub DbiExtraStreamOverlay, pub DbiExtraStreamOverlayMut) {
 });
 const_assert!(DbiExtraStreamOverlay::size() == 0x16);
 
-// https://llvm.org/docs/PDB/DbiStream.html#dbi-mod-info-substream
-struct_overlay_both!((pub ModInfoOverlay, pub ModInfoOverlayMut) {
-    [0x00] unused1: u32,
-    [0x04] section: u16,
-    [0x06] padding1: [u8; 2],
-    [0x08] offset: i32,
-    [0x0C] size: i32,
-    [0x10] characteristics: u32,
-    [0x14] module_index: u16,
-    [0x16] padding2: [u8; 2],
-    [0x18] data_crc: u32,
-    [0x1C] reloc_crc: u32,
-    [0x20] flags: u16,
-    [0x22] module_sym_stream: u16,
-    [0x24] sym_byte_size: u32,
-    [0x28] c11_byte_size: u32,
-    [0x2C] c13_byte_size: u32,
-});
-const_assert!(ModInfoOverlay::size() == 0x30);
-
 /// High level abstraction of the DBI stream.
 #[derive(Debug, Default, Clone)]
 pub struct DbiStream {
