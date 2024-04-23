@@ -6,6 +6,12 @@ This library will only work for PDB 7.0 files (aka large MSF files).
 
 **_This project is heavily pasted from pdb-rs_**
 
+### Limits
+
+This project will only change the OMAP streams in the PDB file. These streams are not used by every PDB parser out there.
+
+***You must use the old windbg to view the changes we make to the PDB with this library.***
+
 ### PDB Details
 
 The PDB file format is actually a file system within a file. The format is an "MSF" (Multi Stream File). Just know that a single file can contain multiple "streams". Each of these streams contains bytes.
