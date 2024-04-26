@@ -1,9 +1,6 @@
 // Copyright (C) Back Engineering Labs, Inc. - All Rights Reserved
-//
-// Unauthorized copying of this file, via any medium is strictly prohibited
-// Proprietary and confidential
 
-use std::{fs, io::Write};
+use std::io::Write;
 
 use elderscroll::{
     dbi::DbiStream,
@@ -16,7 +13,7 @@ use elderscroll::{
 
 /// This test just moves 2 functions to padding inbetween
 /// Existing functions. Just a demo to show that we can move code.
-/// 
+///
 /// All other symbols get mapped to 0. You can only see these effects
 /// by loading the pdb into the old windbg.
 #[test]

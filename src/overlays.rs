@@ -1,6 +1,4 @@
 // Copyright (C) Back Engineering Labs, Inc. - All Rights Reserved
-//
-// Written by Iizerd, 1/15/2023
 
 /// Computes the minimum size of the structure, which is the max of all elements
 /// offset + size in the struct.
